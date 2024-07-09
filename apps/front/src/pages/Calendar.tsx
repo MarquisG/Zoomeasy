@@ -3,14 +3,22 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Meeting } from '@/types/meeting'
 import { Button } from '@headlessui/react'
 import CreateMeetingModal from './CreateMeetingModal'
+import { updateMeeting } from '../api/api'
+import toast from 'react-hot-toast'
+import dayjs from 'dayjs'
+import ShowMeetingModal from './ShowMeetingModal'
 
 const MINUTES_PER_SLOT = 15
 const SLOTS_PER_HOUR = 60 / MINUTES_PER_SLOT
 const SLOT_HEIGHT = 12 // 3rem (h-12) divided by 4 slots
 const HOURS_PER_DAY = 24
 
-export default function Calendar() {
-	const [meetings, setMeetings] = useState<Meeting[]>([])
+interface CalendarProps {
+	meetings: Meeting[]
+}
+
+export default function Calendar({ meetings: initialMeetings }: CalendarProps) {
+	const [meetings, setMeetings] = useState<Meeting[]>(initialMeetings)
 
 	const [showDialog, setShowDialog] = useState(false)
 	const [newMeeting, setNewMeeting] = useState<Meeting>()
@@ -19,6 +27,10 @@ export default function Calendar() {
 	const [draggedElementY, setDraggedElementY] = useState<number>(0)
 	const [resizingMeeting, setResizingMeeting] = useState<Meeting>()
 	const calendarRef = useRef<HTMLDivElement>(null)
+
+	const [isUpdating, setIsUpdating] = useState(false)
+
+	const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 	function getWeekStart(date: Date) {
 		const d = new Date(date)
@@ -29,6 +41,30 @@ export default function Calendar() {
 
 	function formatDate(date: Date) {
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+	}
+
+	async function update(meeting: Meeting) {
+		if (isUpdating) return
+
+		setIsUpdating(true)
+
+		const startTime = new Date(meeting.startTime).toISOString()
+		const formatedTime = dayjs(startTime).format('YYYY-MM-DDTHH:mm:ssZ')
+
+		await toast.promise(
+			updateMeeting(meeting.id, {
+				startTime: formatedTime,
+				duration: (meeting.endTime - meeting.startTime) / 1000 / 60,
+				timezone
+			}),
+			{
+				loading: 'Updating meeting...',
+				success: 'Meeting updated!',
+				error: 'Failed to update meeting'
+			}
+		)
+
+		setIsUpdating(false)
 	}
 
 	const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -71,6 +107,15 @@ export default function Calendar() {
 					? { ...m, date: new Date(date), startTime: newStartTime.getTime(), endTime: newEndTime.getTime() }
 					: m
 				))
+
+				const newMeeting = {
+					...draggedMeeting,
+					date: new Date(date),
+					startTime: newStartTime.getTime(),
+					endTime: newEndTime.getTime()
+				}
+
+				await update(newMeeting)
 
 				setDraggedElementY(0)
 				setDraggedMeeting(undefined)
@@ -117,6 +162,8 @@ export default function Calendar() {
 	// MeetingSlot Component
 	// --------------------
 	function MeetingSlot ({ meeting }: { meeting: Meeting }) {
+		const [showModal, setShowModal] = useState(false)
+
 		const startDate = new Date(meeting.startTime)
 		const endDate = new Date(meeting.endTime)
 		const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60) // duration in minutes
@@ -145,6 +192,7 @@ export default function Calendar() {
 
 		function handleClick(e: React.MouseEvent<HTMLDivElement>) {
 			e.stopPropagation()
+			setShowModal(true)
 		}
 
 		return (
@@ -163,11 +211,17 @@ export default function Calendar() {
 				className="absolute bottom-0 left-0 right-0 h-2 bg-blue-700 cursor-ns-resize" 
 				onMouseDown={ handleResizeStart }
 				/>
+			<ShowMeetingModal
+				open={ showModal }
+				onClose={ () => setShowModal(false) }
+				meeting={ meeting }
+			/>
 			</div>
 		)
 	}
 
-	function handleConfirm () {
+	function handleConfirm (meeting: Meeting) {
+		setMeetings([...meetings, meeting])
 		setShowDialog(false)
 	}
 
@@ -195,6 +249,14 @@ export default function Calendar() {
 							? { ...m, endTime: newEndTime.getTime() }
 							: m
 						))
+
+						const newMeeting = {
+							...resizingMeeting,
+							duration: (newEndTime.getTime() - resizingMeeting.startTime) / 1000 / 60,
+							endTime: newEndTime.getTime()
+						}
+
+						update(newMeeting)
 					}
 				}
 			}

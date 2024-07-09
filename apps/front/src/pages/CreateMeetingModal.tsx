@@ -3,23 +3,62 @@ import { Button, Dialog, DialogPanel, DialogTitle , DialogBackdrop, Input } from
 import { CalendarPlus } from 'lucide-react'
 import { useState } from 'react'
 import { Meeting } from '@/types/meeting'
+import toast from 'react-hot-toast'
+import dayjs from 'dayjs'
+
+import { createMeeting } from '../api/api'
 
 interface CreateMeetingModalProps {
 	open: boolean
 	onClose: () => void
-	onConfirm: () => void
+	onConfirm: (meeting: Meeting) => void
 	meeting: Meeting
 }
 
 export default function CreateMeetingModal({ open, onClose, onConfirm, meeting }: CreateMeetingModalProps ) {
 	const [topic, setTopic] = useState<string>('')
+	const [isInvalidForm, setIsInvalidForm] = useState(false)
+
+	const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 	function handleInputChange (e: React.ChangeEvent<HTMLInputElement>) {
 		setTopic(e.target.value)
 	}
 
 	function handleConfirm () {
-		onConfirm()
+		if (!topic.trim()) {
+			setIsInvalidForm(true)
+			return
+		}
+
+		toast.promise(
+			saveMeeting(),
+			{
+				loading: 'Creating meeting...',
+				success: 'Meeting created!',
+				error: 'Failed to create meeting'
+			}
+		)
+	}
+
+	async function saveMeeting() {
+		const startTime = new Date(meeting.startTime).toISOString()
+		const formatedTime = dayjs(startTime).format('YYYY-MM-DDTHH:mm:ssZ')
+
+		const newMeeting = await createMeeting({
+			topic: topic.trim(),
+			startTime: formatedTime,
+			duration: (meeting.endTime - meeting.startTime) / 1000 / 60,
+			timezone
+		})
+
+		onConfirm({
+			...meeting,
+			id: String(newMeeting.id),
+			topic
+		})
+
+		setTopic('')
 	}
 
 	const startHour = new Date(meeting.startTime).getHours()
@@ -72,6 +111,13 @@ export default function CreateMeetingModal({ open, onClose, onConfirm, meeting }
 								/>
 							</div>
 						</div>
+						{
+							isInvalidForm && (
+								<p className="text-red-500 text-sm mt-2">
+									Please enter a subject for the meeting
+								</p>
+							)
+						}
 						<div className="mt-4 flex">
 							<Button
 								className="text-gray-900 bg-white border border-gray-300 focus:outline-none hover:bg-gray-100 focus:ring-4 focus:ring-gray-100 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2"

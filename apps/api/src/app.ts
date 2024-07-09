@@ -2,6 +2,8 @@ import express, { NextFunction, Request, Response } from 'express'
 import { config as dotenvConfig } from 'dotenv'
 import cors from 'cors'
 
+import { MeetingsController } from './controllers/MeetingsController'
+
 dotenvConfig()
 
 /* --------------------------- Set up Application --------------------------- */
@@ -25,8 +27,10 @@ app.use(cors({
 
 /* ----------------------------- Defines Routes ----------------------------- */
 app.get('/', (_req: Request, res: Response) => {
-	res.send('Hello world!')
+	res.send('Hello, TypeScript Express!')
 })
+
+app.use('/meetings', MeetingsController)
 
 
 /* --------------------------- Error Handling ------------------------------ */
